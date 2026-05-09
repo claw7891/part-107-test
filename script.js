@@ -1,156 +1,120 @@
 // Questions are loaded from questions.js (global 'questions' array of ~300 items)
 
-let currentQuestionIndex = 0;
 let score = 0;
-let answered = false;
+let totalAnswered = 0;
+const answeredState = {}; // Tracks which questions have been answered
 
 document.addEventListener('DOMContentLoaded', function() {
-    loadQuestion();
-    updateProgress();
+    renderAllQuestions();
+    updateScoreBar();
 });
 
-function loadQuestion() {
-    const quizContainer = document.getElementById('quiz-container');
-    const question = questions[currentQuestionIndex];
+function renderAllQuestions() {
+    const container = document.getElementById('quiz-container');
+    let html = '';
     
-    quizContainer.innerHTML = `
-        <div class="question-number">Question ${question.id}</div>
-        <div class="question-text">${question.text}</div>
-        <div class="options">
-            ${question.options.map((option, index) => `
-                <button class="option-button" onclick="selectAnswer(${index})">
-                    ${option}
-                </button>
-            `).join('')}
-        </div>
-        <button id="submit-button" onclick="submitAnswer()" ${answered ? 'disabled' : ''}>
-            Submit Answer
-        </button>
-        <button id="next-button" onclick="nextQuestion()" ${!answered ? 'disabled' : ''} style="display: none;">
-            Next Question
-        </button>
-        <div class="explanation" id="explanation">
-            <h3>Explanation:</h3>
-            <p id="explanation-text"></p>
-        </div>
-    `;
-}
-
-function selectAnswer(index) {
-    // Remove selection from all buttons
-    const buttons = document.querySelectorAll('.option-button');
-    buttons.forEach(button => {
-        button.classList.remove('selected');
+    questions.forEach((q, idx) => {
+        html += `
+            <div class="question-card" id="q-${idx}">
+                <div class="q-header">
+                    <span class="q-num">#${q.id}</span>
+                </div>
+                <div class="q-text">${q.text}</div>
+                <div class="q-options">
+                    ${q.options.map((opt, oi) => `
+                        <button class="opt-btn" onclick="selectOption(${idx}, ${oi})" data-q="${idx}" data-o="${oi}">
+                            <span class="opt-letter">${String.fromCharCode(65 + oi)}.</span> ${opt}
+                        </button>
+                    `).join('')}
+                </div>
+                <div class="q-actions">
+                    <button class="check-btn" id="check-${idx}" onclick="checkAnswer(${idx})">
+                        Check Answer
+                    </button>
+                </div>
+                <div class="q-feedback" id="feedback-${idx}"></div>
+            </div>
+        `;
     });
     
-    // Add selection to clicked button
-    event.target.classList.add('selected');
-    
-    // Enable submit button
-    document.getElementById('submit-button').disabled = false;
+    container.innerHTML = html;
 }
 
-function submitAnswer() {
-    if (answered) return;
+function selectOption(qIdx, oIdx) {
+    if (answeredState[qIdx]) return; // Already answered — no changes
     
-    const selectedButton = document.querySelector('.option-button.selected');
-    if (!selectedButton) {
-        alert('Please select an answer before submitting.');
+    // Deselect all options for this question
+    const card = document.getElementById(`q-${qIdx}`);
+    card.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('selected'));
+    
+    // Select clicked option
+    const btn = card.querySelector(`.opt-btn[data-q="${qIdx}"][data-o="${oIdx}"]`);
+    btn.classList.add('selected');
+}
+
+function checkAnswer(qIdx) {
+    if (answeredState[qIdx]) return; // Already answered
+    
+    const q = questions[qIdx];
+    const card = document.getElementById(`q-${qIdx}`);
+    const selected = card.querySelector('.opt-btn.selected');
+    
+    if (!selected) {
+        // Highlight that they need to pick one
+        card.querySelectorAll('.opt-btn').forEach(b => b.style.borderColor = '#e74c3c');
+        setTimeout(() => {
+            card.querySelectorAll('.opt-btn').forEach(b => b.style.borderColor = '');
+        }, 600);
         return;
     }
     
-    const question = questions[currentQuestionIndex];
-    const selectedIndex = Array.from(selectedButton.parentNode.children).indexOf(selectedButton);
+    const selectedIdx = parseInt(selected.dataset.o);
+    const isCorrect = selectedIdx === q.correctAnswer;
     
-    // Check if answer is correct
-    const isCorrect = selectedIndex === question.correctAnswer;
-    
-    // Update button styles
-    const buttons = document.querySelectorAll('.option-button');
-    buttons.forEach((button, index) => {
-        button.disabled = true;
-        if (index === question.correctAnswer) {
-            button.classList.add('correct');
-        } else if (index === selectedIndex && !isCorrect) {
-            button.classList.add('incorrect');
+    // Mark all options
+    card.querySelectorAll('.opt-btn').forEach((btn, bi) => {
+        btn.disabled = true;
+        if (bi === q.correctAnswer) {
+            btn.classList.add('correct');
+        } else if (bi === selectedIdx && !isCorrect) {
+            btn.classList.add('incorrect');
         }
     });
     
-    // Show explanation
-    const explanationDiv = document.getElementById('explanation');
-    const explanationText = document.getElementById('explanation-text');
-    explanationText.textContent = question.explanation;
-    explanationDiv.classList.add('show');
+    // Update score
+    totalAnswered++;
+    if (isCorrect) score++;
+    answeredState[qIdx] = true;
     
-    // Update score if correct
-    if (isCorrect) {
-        score++;
-    }
-    
-    // Update button states
-    document.getElementById('submit-button').disabled = true;
-    document.getElementById('next-button').disabled = false;
-    document.getElementById('next-button').style.display = 'block';
-    
-    answered = true;
-}
-
-function nextQuestion() {
-    currentQuestionIndex++;
-    
-    if (currentQuestionIndex >= questions.length) {
-        showResults();
-        return;
-    }
-    
-    answered = false;
-    loadQuestion();
-    updateProgress();
-    
-    // Reset button states
-    document.getElementById('submit-button').disabled = false;
-    document.getElementById('next-button').disabled = true;
-    document.getElementById('next-button').style.display = 'none';
-    document.getElementById('explanation').classList.remove('show');
-}
-
-function updateProgress() {
-    const progressFill = document.getElementById('progress-fill');
-    const progressText = document.getElementById('progress-text');
-    
-    const progressPercent = ((currentQuestionIndex + 1) / questions.length) * 100;
-    progressFill.style.width = progressPercent + '%';
-    progressText.textContent = `Question ${currentQuestionIndex + 1} of ${questions.length}`;
-}
-
-function showResults() {
-    const quizContainer = document.getElementById('quiz-container');
-    const percentage = Math.round((score / questions.length) * 100);
-    
-    quizContainer.innerHTML = `
-        <h2>Quiz Complete!</h2>
-        <p>You scored ${score} out of ${questions.length} (${percentage}%)</p>
-        <p>${percentage >= 80 ? 'Great job! You seem ready for the actual test.' : 'Keep studying! You\'ll need at least 80% to pass the actual Part 107 test.'}</p>
-        <button onclick="resetQuiz()" class="option-button" style="margin-top: 20px; width: auto; padding: 10px 20px;">
-            Try Again
-        </button>
+    // Show feedback
+    const fb = document.getElementById(`feedback-${qIdx}`);
+    fb.className = 'q-feedback show ' + (isCorrect ? 'fb-correct' : 'fb-incorrect');
+    fb.innerHTML = `
+        <div class="fb-header">
+            ${isCorrect ? '✓ Correct!' : '✗ Incorrect'}
+        </div>
+        <div class="fb-explanation">${q.explanation}</div>
     `;
     
-    // Hide progress bar and next button
-    document.getElementById('progress-container').style.display = 'none';
-    document.getElementById('submit-button').style.display = 'none';
-    document.getElementById('next-button').style.display = 'none';
+    // Scroll to show feedback
+    fb.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    
+    // Hide check button
+    document.getElementById(`check-${qIdx}`).style.display = 'none';
+    
+    updateScoreBar();
 }
 
-function resetQuiz() {
-    currentQuestionIndex = 0;
-    score = 0;
-    answered = false;
-    
-    document.getElementById('progress-container').style.display = 'block';
-    document.getElementById('submit-button').style.display = 'block';
-    document.getElementById('next-button').style.display = 'none';
-    
-    loadQuestion();
-    updateProgress();
+function updateScoreBar() {
+    const bar = document.getElementById('score-bar');
+    if (totalAnswered === 0) {
+        bar.innerHTML = `<span class="score-text">${questions.length} questions — pick an answer for each</span>`;
+        return;
+    }
+    const pct = Math.round((score / totalAnswered) * 100);
+    bar.innerHTML = `
+        <span class="score-text">Score: <strong>${score}/${totalAnswered}</strong> (${pct}%)</span>
+        <span class="score-label">— ${questions.length} total</span>
+    `;
+    bar.className = 'score-bar ' + (pct >= 80 ? 'score-passing' : '');
 }
